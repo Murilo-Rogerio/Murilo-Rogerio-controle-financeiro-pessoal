@@ -49,7 +49,7 @@ export function IncomeFormCard() {
         </Button>
 
         {/* Entrada fixa mensal + dia do mês */}
-        <div className="sm:col-span-2 lg:col-span-6">
+        <div className="sm:col-span-2 lg:col-span-5">
           <label className="flex cursor-pointer items-center gap-2.5 select-none">
             <input type="checkbox" name="is_fixed_monthly" checked={isFixed}
               onChange={e => setIsFixed(e.target.checked)}
@@ -81,7 +81,7 @@ export function IncomeFormCard() {
           )}
         </AnimatePresence>
 
-        <div className="sm:col-span-2 lg:col-span-6">
+        <div className="sm:col-span-2 lg:col-span-5">
           <FormError message={state.error} />
         </div>
       </form>
