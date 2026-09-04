@@ -17,22 +17,22 @@ const BUILTIN: ResolvedCategory[] = [
 
 /* ── Ícones disponíveis para categorias custom (whitelist) ────────────── */
 export const ICON_CHOICES = [
-  { value: 'ShoppingBag',   icon: ShoppingBag },
+  { value: 'ShoppingBag',     icon: ShoppingBag },
   { value: 'UtensilsCrossed', icon: UtensilsCrossed },
-  { value: 'Car',           icon: Car },
-  { value: 'Bus',           icon: Bus },
-  { value: 'Home',          icon: Home },
-  { value: 'Wifi',          icon: Wifi },
-  { value: 'Gamepad2',      icon: Gamepad2 },
-  { value: 'Clapperboard',  icon: Clapperboard },
-  { value: 'Dumbbell',      icon: Dumbbell },
-  { value: 'GraduationCap', icon: GraduationCap },
-  { value: 'Plane',         icon: Plane },
-  { value: 'Heart',         icon: Heart },
-  { value: 'Gift',          icon: Gift },
-  { value: 'Cat',           icon: Cat },
-  { value: 'Banknote',      icon: Banknote },
-  { value: 'Tag',           icon: Tag },
+  { value: 'Car',             icon: Car },
+  { value: 'Bus',             icon: Bus },
+  { value: 'Home',            icon: Home },
+  { value: 'Wifi',            icon: Wifi },
+  { value: 'Gamepad2',        icon: Gamepad2 },
+  { value: 'Clapperboard',    icon: Clapperboard },
+  { value: 'Dumbbell',        icon: Dumbbell },
+  { value: 'GraduationCap',   icon: GraduationCap },
+  { value: 'Plane',           icon: Plane },
+  { value: 'Heart',           icon: Heart },
+  { value: 'Gift',            icon: Gift },
+  { value: 'Cat',             icon: Cat },
+  { value: 'Banknote',        icon: Banknote },
+  { value: 'Tag',             icon: Tag },
 ] as const
 
 export const ICON_MAP: Record<string, LucideIcon> = Object.fromEntries(
@@ -51,7 +51,6 @@ export const COLOR_SWATCHES = [
 /**
  * Resolve um slug de categoria → metadados visuais.
  * Aceita built-ins e customs ('c:<uuid>'). Fallback: "Outros".
- * Síncrono e isomórfico: funciona em Server e Client Components.
  */
 export function resolveCategory(slug: string, custom: Category[]): ResolvedCategory {
   if (slug.startsWith('c:')) {
@@ -75,3 +74,6 @@ export const SOURCE_META: Record<IncomeSource, { label: string; badge: string; i
   fixo:     { label: 'Fixo',  badge: 'bg-emerald-500/10 text-emerald-300', icon: Briefcase },
   variavel: { label: 'Extra', badge: 'bg-amber-500/10 text-amber-300',      icon: Sparkles },
 }
+
+/** Valores válidos de source_type — usado na validação da action de entradas. */
+export const INCOME_SOURCE_VALUES: IncomeSource[] = ['fixo', 'variavel']
