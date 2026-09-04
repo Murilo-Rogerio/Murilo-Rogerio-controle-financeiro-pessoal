@@ -70,9 +70,7 @@ export interface MonthlyOverview {
 
 /**
  * Panorama do mês consultado (real OU projetado):
- *  - lançamentos únicos do mês + séries recorrentes/parceladas materializadas;
- *  - parcelamentos ativos (progresso em relação ao mês ATUAL);
- *  - categorias custom do usuário.
+ * lançamentos únicos + séries recorrentes/parceladas materializadas.
  */
 export async function getMonthlyOverview(monthKey: string): Promise<MonthlyOverview> {
   const { supabase } = await requireUser()
@@ -80,8 +78,7 @@ export async function getMonthlyOverview(monthKey: string): Promise<MonthlyOverv
   const today = todayISO()
   const nowKey = currentMonthKey()
 
-  // Séries recorrentes: busca até o fim do mês consultado OU até hoje (o maior),
-  // garantindo parcelamentos ativos mesmo consultando meses passados.
+  // Séries recorrentes: busca até o fim do mês consultado OU até hoje (o maior).
   const recurringCutoff = [end, today].sort()[1]
 
   const [monthExpenses, recurringExpenses, monthIncomes, fixedIncomes, categoriesRes, savingsRes] =
