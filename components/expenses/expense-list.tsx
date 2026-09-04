@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useActionState, useEffect, useState, useTransition } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { deleteExpense, updateExpense } from '@/lib/actions/expenses'
 import { Button } from '@/components/ui/button'
