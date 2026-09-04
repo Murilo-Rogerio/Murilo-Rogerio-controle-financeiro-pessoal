@@ -4,9 +4,6 @@ import type { Expense, Income, ProjectedExpense, ProjectedIncome } from './types
 /**
  * Motor de recorrência: um lançamento "mestre" é materializado em qualquer mês
  * consultado, sem duplicar linhas no banco.
- *  - 'unica'     → aparece apenas no mês da data original
- *  - 'mensal'    → aparece em todo mês a partir da data original
- *  - 'parcelada' → parcela vigente = parcela_inicial + meses decorridos
  */
 
 function monthIndex(key: string): number {
@@ -74,7 +71,7 @@ export function projectIncome(
 
 /**
  * Próximas entradas fixas previstas: do mês consultado (datas >= hoje);
- * se todas já caíram, projeta o mês seguinte. Retorna também o mês usado.
+ * se todas já caíram, projeta o mês seguinte.
  */
 export function upcomingFixedIncomes(
   fixedRows: Income[], monthKey: string, today: string,
