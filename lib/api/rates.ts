@@ -2,9 +2,7 @@
  * Integração com a BrasilAPI (gratuita, sem chave).
  * Endpoint: https://brasilapi.com.br/api/taxas/v1/CDI → { nome, valor }
  *
- * Estratégia de cache: fetch nativo do Next com revalidate de 1h
- * (Server Components / Actions). Isso substitui o SWR com vantagem:
- * zero dependência extra e o dado já chega pronto do servidor.
+ * Cache: fetch nativo do Next com revalidate de 1h (Server Components).
  * Fallback: 10,5% a.a. caso a API esteja fora (nunca quebra a UI).
  */
 const FALLBACK_RATE = 10.5
