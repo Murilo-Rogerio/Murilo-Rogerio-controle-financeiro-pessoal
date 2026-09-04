@@ -1,9 +1,14 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { lastMonthKeys, monthRange, monthShort } from '@/lib/date'
+import { fetchCdiRate } from '@/lib/api/rates'
+import { currentMonthKey, lastMonthKeys, monthRange, monthShort, todayISO } from '@/lib/date'
 import { toNumber } from '@/lib/format'
 import { computeCdi } from '@/lib/finance'
-import type { Expense, FlowRow, Income, Savings } from '@/lib/types'
+import { monthsBetween, projectExpense, projectIncome } from '@/lib/recurrence'
+import type {
+  ActiveInstallment, Category, Expense, FlowRow, Income,
+  ProjectedExpense, ProjectedIncome, Savings,
+} from '@/lib/types'
 
 /** Garante usuário autenticado (segunda camada, além do middleware). */
 export async function requireUser() {
@@ -13,15 +18,27 @@ export async function requireUser() {
   return { supabase, user }
 }
 
-// ── Normalizadores (numeric → number) ────────────────────────────────
-const asIncome = (row: any): Income => ({ ...row, amount: toNumber(row.amount) })
-const asExpense = (row: any): Expense => ({ ...row, amount: toNumber(row.amount) })
+/* ── Normalizadores (numeric → number) ───────────────────────────────── */
+const asExpense = (row: any): Expense => ({
+  ...row,
+  amount: toNumber(row.amount),
+  recurrence: row.recurrence ?? 'unica',
+  installments_total: row.installments_total ?? null,
+  installment_number: row.installment_number ?? null,
+})
+const asIncome = (row: any): Income => ({
+  ...row,
+  amount: toNumber(row.amount),
+  is_fixed_monthly: row.is_fixed_monthly ?? false,
+  day_of_month: row.day_of_month ?? null,
+})
 const asSavings = (row: any): Savings => ({
   ...row,
   amount: toNumber(row.amount),
   cdi_annual_rate: toNumber(row.cdi_annual_rate),
   cdi_percent: toNumber(row.cdi_percent),
 })
+const asCategory = (row: any): Category => ({ ...row })
 
 export async function getSavings(): Promise<Savings | null> {
   const { supabase } = await requireUser()
@@ -29,96 +46,138 @@ export async function getSavings(): Promise<Savings | null> {
   return data ? asSavings(data) : null
 }
 
+export async function getCustomCategories(): Promise<Category[]> {
+  const { supabase } = await requireUser()
+  const { data } = await supabase.from('categories').select('*').order('name')
+  return (data ?? []).map(asCategory)
+}
+
 export interface MonthlyOverview {
   monthKey: string
-  incomes: Income[]
-  expenses: Expense[]
+  isFuture: boolean
+  expenseItems: ProjectedExpense[]
+  incomeItems: ProjectedIncome[]
+  activeInstallments: ActiveInstallment[]
   savings: Savings | null
+  customCategories: Category[]
   totalIncome: number
-  totalFixed: number
-  totalVariable: number
+  totalIncomeProjected: number
+  totalFixedMonthly: number
   totalExpense: number
+  totalExpenseProjected: number
   balance: number
 }
 
-/** Tudo o que as páginas precisam sobre um mês específico. */
+/**
+ * Panorama do mês consultado (real OU projetado):
+ *  - lançamentos únicos do mês + séries recorrentes/parceladas materializadas;
+ *  - parcelamentos ativos (progresso em relação ao mês ATUAL);
+ *  - categorias custom do usuário.
+ */
 export async function getMonthlyOverview(monthKey: string): Promise<MonthlyOverview> {
   const { supabase } = await requireUser()
   const { start, end } = monthRange(monthKey)
+  const today = todayISO()
+  const nowKey = currentMonthKey()
 
-  const [incomesRes, expensesRes, savingsRes] = await Promise.all([
-    supabase.from('incomes').select('*')
-      .gte('received_at', start).lt('received_at', end)
-      .order('received_at', { ascending: false })
-      .order('created_at', { ascending: false }),
-    supabase.from('expenses').select('*')
-      .gte('spent_at', start).lt('spent_at', end)
-      .order('spent_at', { ascending: false })
-      .order('created_at', { ascending: false }),
-    // O RLS filtra por user_id automaticamente — nenhum dado alheio é retornado.
-    supabase.from('savings').select('*').maybeSingle(),
-  ])
+  // Séries recorrentes: busca até o fim do mês consultado OU até hoje (o maior),
+  // garantindo parcelamentos ativos mesmo consultando meses passados.
+  const recurringCutoff = [end, today].sort()[1]
 
-  const incomes = (incomesRes.data ?? []).map(asIncome)
-  const expenses = (expensesRes.data ?? []).map(asExpense)
+  const [monthExpenses, recurringExpenses, monthIncomes, fixedIncomes, categoriesRes, savingsRes] =
+    await Promise.all([
+      supabase.from('expenses').select('*').gte('spent_at', start).lt('spent_at', end),
+      supabase.from('expenses').select('*').neq('recurrence', 'unica').lte('spent_at', recurringCutoff),
+      supabase.from('incomes').select('*').gte('received_at', start).lt('received_at', end),
+      supabase.from('incomes').select('*').eq('is_fixed_monthly', true).lte('received_at', recurringCutoff),
+      supabase.from('categories').select('*').order('name'),
+      supabase.from('savings').select('*').maybeSingle(),
+    ])
 
-  const totalIncome = incomes.reduce((sum, i) => sum + i.amount, 0)
-  const totalFixed = incomes.filter(i => i.source_type === 'fixo').reduce((s, i) => s + i.amount, 0)
-  const totalExpense = expenses.reduce((sum, e) => sum + e.amount, 0)
+  // Dedupe por id (série que começou no próprio mês vem nas duas queries).
+  const expenseMap = new Map<string, Expense>()
+  for (const row of [...(monthExpenses.data ?? []), ...(recurringExpenses.data ?? [])]) {
+    expenseMap.set(row.id, asExpense(row))
+  }
+  const incomeMap = new Map<string, Income>()
+  for (const row of [...(monthIncomes.data ?? []), ...(fixedIncomes.data ?? [])]) {
+    incomeMap.set(row.id, asIncome(row))
+  }
+
+  const expenseItems = [...expenseMap.values()]
+    .map(expense => projectExpense(expense, monthKey, today))
+    .filter((x): x is ProjectedExpense => x !== null)
+    .sort((a, b) => b.date.localeCompare(a.date))
+
+  const incomeItems = [...incomeMap.values()]
+    .map(income => projectIncome(income, monthKey, today))
+    .filter((x): x is ProjectedIncome => x !== null)
+    .sort((a, b) => b.date.localeCompare(a.date))
+
+  const totalIncome = incomeItems.reduce((s, i) => s + i.income.amount, 0)
+  const totalIncomeProjected = incomeItems.filter(i => i.isProjected).reduce((s, i) => s + i.income.amount, 0)
+  const totalFixedMonthly = incomeItems.filter(i => i.income.is_fixed_monthly).reduce((s, i) => s + i.income.amount, 0)
+  const totalExpense = expenseItems.reduce((s, i) => s + i.expense.amount, 0)
+  const totalExpenseProjected = expenseItems.filter(i => i.isProjected).reduce((s, i) => s + i.expense.amount, 0)
+
+  const activeInstallments: ActiveInstallment[] = [...expenseMap.values()]
+    .filter(e => e.recurrence === 'parcelada')
+    .map(e => {
+      const total = e.installments_total ?? 1
+      const current = (e.installment_number ?? 1)
+        + Math.max(0, monthsBetween(e.spent_at.slice(0, 7), nowKey))
+      return { expense: e, current, total, remaining: Math.max(0, total - current) }
+    })
+    .filter(series => series.remaining > 0)
+    .sort((a, b) => b.remaining - a.remaining)
 
   return {
     monthKey,
-    incomes,
-    expenses,
+    isFuture: monthKey > nowKey,
+    expenseItems,
+    incomeItems,
+    activeInstallments,
     savings: savingsRes.data ? asSavings(savingsRes.data) : null,
-    totalIncome,
-    totalFixed,
-    totalVariable: totalIncome - totalFixed,
-    totalExpense,
+    customCategories: (categoriesRes.data ?? []).map(asCategory),
+    totalIncome, totalIncomeProjected, totalFixedMonthly,
+    totalExpense, totalExpenseProjected,
     balance: totalIncome - totalExpense,
   }
 }
 
-/**
- * Entradas x Saídas dos últimos 6 meses + rendimento CDI estimado
- * (constante, calculado com a taxa e o patrimônio registrados hoje).
- */
+/** Entradas x Saídas x CDI dos últimos N meses (com projeções). */
 export async function getFlowHistory(monthKey: string, months = 6): Promise<FlowRow[]> {
   const { supabase } = await requireUser()
   const keys = lastMonthKeys(months, monthKey)
-  const { start } = monthRange(keys[0])
+  const { end } = monthRange(monthKey)
+  const today = todayISO()
 
-  const [incomesRes, expensesRes, savingsRes] = await Promise.all([
-    supabase.from('incomes').select('received_at, amount').gte('received_at', start),
-    supabase.from('expenses').select('spent_at, amount').gte('spent_at', start),
-    supabase.from('savings').select('amount, cdi_annual_rate, cdi_percent').maybeSingle(),
+  const [expensesRes, incomesRes, savingsRes, rate] = await Promise.all([
+    supabase.from('expenses').select('*').lt('spent_at', end).order('spent_at').limit(5000),
+    supabase.from('incomes').select('*').lt('received_at', end).order('received_at').limit(5000),
+    supabase.from('savings').select('*').maybeSingle(),
+    fetchCdiRate(),
   ])
 
-  const sumBy = (rows: any[] | null, dateField: string) => {
-    const map = new Map<string, number>()
-    for (const row of rows ?? []) {
-      const key = String(row[dateField]).slice(0, 7) // 'YYYY-MM'
-      map.set(key, (map.get(key) ?? 0) + toNumber(row.amount))
-    }
-    return map
-  }
-  const incomeMap = sumBy(incomesRes.data, 'received_at')
-  const expenseMap = sumBy(expensesRes.data, 'spent_at')
+  const expenses = (expensesRes.data ?? []).map(asExpense)
+  const incomes = (incomesRes.data ?? []).map(asIncome)
+  const savings = savingsRes.data ? asSavings(savingsRes.data) : null
 
-  const savings = savingsRes.data
-  const monthlyCdiIncome = savings
-    ? computeCdi({
-        amount: toNumber(savings.amount),
-        annualRate: toNumber(savings.cdi_annual_rate),
-        cdiPercent: toNumber(savings.cdi_percent),
-      }).monthlyGross
+  // CDI: taxa da API em tempo real → taxa salva (fallback) → default.
+  const annualRate = rate.source === 'api' ? rate.value : (savings?.cdi_annual_rate ?? rate.value)
+  const cdiMonthly = savings
+    ? computeCdi({ amount: savings.amount, annualRate, cdiPercent: savings.cdi_percent }).monthlyGross
     : 0
 
-  return keys.map(key => ({
-    key,
-    label: monthShort(key),
-    entradas: Math.round((incomeMap.get(key) ?? 0) * 100) / 100,
-    saidas: Math.round((expenseMap.get(key) ?? 0) * 100) / 100,
-    rendimento: Math.round(monthlyCdiIncome * 100) / 100,
-  }))
+  return keys.map(key => {
+    const entradas = incomes.reduce((s, i) => (projectIncome(i, key, today) ? s + i.amount : s), 0)
+    const saidas = expenses.reduce((s, e) => (projectExpense(e, key, today) ? s + e.amount : s), 0)
+    return {
+      key,
+      label: monthShort(key),
+      entradas: Math.round(entradas * 100) / 100,
+      saidas: Math.round(saidas * 100) / 100,
+      rendimento: Math.round(cdiMonthly * 100) / 100,
+    }
+  })
 }

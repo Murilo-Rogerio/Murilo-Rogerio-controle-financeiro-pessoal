@@ -16,9 +16,9 @@ const NAV = [
 ] as const
 
 /**
- * Estrutura de navegação responsiva:
- * - Desktop: sidebar fixa à esquerda (com e-mail + botão Sair)
- * - Mobile: header fixo no topo + bottom navigation
+ * Estrutura responsiva com estética "black premium":
+ * - halos radiais fixos ao fundo dão profundidade ao backdrop-blur dos cards;
+ * - desktop: sidebar glass; mobile: header + bottom nav glass.
  */
 export function AppShell({ email, children }: { email: string; children: ReactNode }) {
   const pathname = usePathname()
@@ -26,8 +26,14 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
 
   return (
     <div className="min-h-dvh">
+      {/* Halos sutis de fundo (emerald/indigo) — base do efeito de vidro */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute -top-32 left-1/4 h-80 w-80 rounded-full bg-emerald-500/[0.05] blur-[120px]" />
+        <div className="absolute -bottom-24 right-[10%] h-96 w-96 rounded-full bg-indigo-500/[0.06] blur-[130px]" />
+      </div>
+
       {/* ── Sidebar (desktop) ── */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-slate-800/60 bg-card/40 lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/5 bg-card/50 backdrop-blur-xl lg:flex">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
             <PiggyBank className="h-5 w-5" />
@@ -53,7 +59,7 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
           ))}
         </nav>
 
-        <div className="border-t border-slate-800/60 p-4">
+        <div className="border-t border-white/5 p-4">
           <p className="truncate text-xs text-slate-500" title={email}>{email}</p>
           <form action={signOut}>
             <Button variant="ghost" size="sm" className="mt-2 w-full justify-start gap-2">
@@ -64,7 +70,7 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
       </aside>
 
       {/* ── Header (mobile) ── */}
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-800/60 bg-base/80 px-4 py-3 backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-white/5 bg-base/70 px-4 py-3 backdrop-blur-xl lg:hidden">
         <div className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
             <PiggyBank className="h-4 w-4" />
@@ -87,7 +93,7 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
       </div>
 
       {/* ── Bottom navigation (mobile) ── */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-slate-800/60 bg-card/90 backdrop-blur lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-white/5 bg-card/80 backdrop-blur-xl lg:hidden">
         {NAV.map(item => (
           <Link key={item.href} href={item.href}
             className={cn(

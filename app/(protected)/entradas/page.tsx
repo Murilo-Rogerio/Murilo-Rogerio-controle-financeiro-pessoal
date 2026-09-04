@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { ArrowDownLeft, Briefcase, Sparkles } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { MonthPicker } from '@/components/ui/month-picker'
 import { StatCard } from '@/components/ui/stat-card'
@@ -25,20 +25,28 @@ export default async function IncomesPage({ searchParams }: PageProps) {
           <h1 className="text-xl font-semibold tracking-tight text-slate-100">Entradas</h1>
           <p className="mt-0.5 text-sm text-slate-500">{monthTitle(monthKey)}</p>
         </div>
-        <MonthPicker monthKey={monthKey} />
+        <div className="flex flex-wrap items-center gap-2">
+          {overview.isFuture && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-medium text-indigo-300">
+              <Sparkles className="h-3 w-3" />Projeção
+            </span>
+          )}
+          <MonthPicker monthKey={monthKey} />
+        </div>
       </div>
 
-      {/* Total bruto mensal + divisão fixo/variável */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Total bruto do mês" value={formatBRL(overview.totalIncome)}
-          sub={`${overview.incomes.length} lançamento(s)`} icon={ArrowDownLeft}
-          tone="bg-emerald-500/10 text-emerald-400" />
-        <StatCard label="Renda fixa" value={formatBRL(overview.totalFixed)}
-          sub="Salário e valores recorrentes" icon={Briefcase}
-          tone="bg-indigo-500/10 text-indigo-400" />
-        <StatCard label="Renda variável" value={formatBRL(overview.totalVariable)}
-          sub="Freelas e extras" icon={Sparkles}
-          tone="bg-amber-500/10 text-amber-400" />
+        <StatCard label="Total bruto do mês" value={formatBRL(overview.totalIncome)} numeric={overview.totalIncome}
+          sub={overview.totalIncomeProjected > 0
+            ? `${formatBRL(overview.totalIncomeProjected)} previsto`
+            : `${overview.incomeItems.length} lançamento(s)`}
+          icon="income" tone="bg-emerald-500/10 text-emerald-400" delay={0} />
+        <StatCard label="Entradas fixas mensais" value={formatBRL(overview.totalFixedMonthly)}
+          numeric={overview.totalFixedMonthly} sub="Repetem todo mês"
+          icon="briefcase" tone="bg-indigo-500/10 text-indigo-400" delay={0.05} />
+        <StatCard label="Extras" value={formatBRL(overview.totalIncome - overview.totalFixedMonthly)}
+          numeric={overview.totalIncome - overview.totalFixedMonthly} sub="Freelas e variáveis"
+          icon="sparkles" tone="bg-amber-500/10 text-amber-400" delay={0.1} />
       </div>
 
       <IncomeFormCard />
@@ -46,7 +54,7 @@ export default async function IncomesPage({ searchParams }: PageProps) {
       <Card>
         <h2 className="px-5 pt-5 text-sm font-semibold text-slate-200">Lançamentos do mês</h2>
         <div className="mt-3">
-          <IncomeList incomes={overview.incomes} />
+          <IncomeList items={overview.incomeItems} />
         </div>
       </Card>
     </div>
