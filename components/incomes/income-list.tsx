@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState, useTransition } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Briefcase, CalendarClock, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { CalendarClock, Pencil, Plus, Trash2 } from 'lucide-react'
 import { deleteIncome, updateIncome } from '@/lib/actions/incomes'
 import { SOURCE_META } from '@/lib/categories'
 import { todayISO } from '@/lib/date'
