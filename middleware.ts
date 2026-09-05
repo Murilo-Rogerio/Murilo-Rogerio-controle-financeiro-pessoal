@@ -2,11 +2,11 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 /**
- * Middleware de autenticação:
- * 1. Renova a sessão do Supabase (refresh token) a cada requisição;
- * 2. Usuário não autenticado em rota protegida → /login;
- * 3. Usuário autenticado em /login → /dashboard.
+ * Rotas acessíveis SEM sessão: login, redefinição de senha,
+ * confirmação de e-mail e o callback de auth.
  */
+const PUBLIC_PATHS = ['/login', '/redefinir-senha', '/verificar-email', '/auth/callback']
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
 
@@ -18,7 +18,7 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
+        setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           response = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) =>
@@ -29,17 +29,16 @@ export async function middleware(request: NextRequest) {
     },
   )
 
-  // getUser() valida o token no servidor (não confia só na sessão local).
   const { data: { user } } = await supabase.auth.getUser()
 
   const { pathname } = request.nextUrl
-  const isLoginPage = pathname.startsWith('/login')
+  const isPublic = PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(`${p}/`))
 
-  if (!user && !isLoginPage) {
+  if (!user && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (user && isLoginPage) {
+  if (user && pathname === '/login') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
@@ -48,7 +47,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Protege tudo, exceto assets estáticos do Next e imagens.
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
