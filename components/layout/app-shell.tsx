@@ -1,6 +1,6 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { CreditCard, LayoutDashboard, LineChart, LogOut, PiggyBank, TrendingUp } from 'lucide-react'
@@ -18,7 +18,35 @@ const NAV = [
 
 export function AppShell({ email, children }: { email: string; children: ReactNode }) {
   const pathname = usePathname()
+  const navRef = useRef<HTMLElement>(null)
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
+
+  /**
+   * ── FIX: navbar inferior sumindo ao reabrir o navegador (Chrome Android) ──
+   * Elementos fixed + backdrop-blur às vezes não são "repintados" quando a aba
+   * é restaurada. Solução em 3 camadas:
+   *   1. transform-gpu / will-change (classes no <nav>) → camada própria;
+   *   2. nudge de repaint ao montar (aba restaurada recarrega o JS);
+   *   3. listener de pageshow → cobre o cache de navegação (bfcache).
+   */
+  useEffect(() => {
+    const repaint = () => {
+      const nav = navRef.current
+      if (!nav) return
+      nav.style.opacity = '0.999'
+      requestAnimationFrame(() => {
+        if (navRef.current) navRef.current.style.opacity = ''
+      })
+    }
+
+    repaint()
+    window.addEventListener('pageshow', repaint)
+
+    return () => {
+      window.removeEventListener('pageshow', repaint)
+      if (navRef.current) navRef.current.style.opacity = ''
+    }
+  }, [])
 
   return (
     <div className="min-h-dvh">
@@ -66,7 +94,7 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
       </aside>
 
       {/* ── Header (mobile) ── */}
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-white/5 bg-base/70 px-4 py-3 backdrop-blur-xl lg:hidden">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-white/5 bg-base/80 px-4 py-3 backdrop-blur-xl will-change-transform lg:hidden">
         <div className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
             <PiggyBank className="h-4 w-4" />
@@ -88,8 +116,14 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
         </main>
       </div>
 
-      {/* ── Bottom navigation (mobile) ── */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-white/5 bg-card/80 backdrop-blur-xl lg:hidden">
+      {/* ── Bottom navigation (mobile) ──
+          transform-gpu + will-change: camada de composição própria (fix do
+          repaint); pb-[env(safe-area-inset-bottom)]: não fica atrás da barra
+          de gestos do Android; bg mais opaco: fallback se o blur falhar. */}
+      <nav
+        ref={navRef}
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-white/5 bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl will-change-transform transform-gpu lg:hidden"
+      >
         {NAV.map(item => (
           <Link key={item.href} href={item.href}
             className={cn(
