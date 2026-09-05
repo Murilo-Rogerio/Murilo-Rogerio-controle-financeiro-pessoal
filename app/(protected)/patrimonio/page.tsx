@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { CdiCalculator } from '@/components/savings/cdi-calculator'
 import { getSavings } from '@/lib/data'
 import { fetchCdiRate } from '@/lib/api/rates'
+import { currentMonthKey } from '@/lib/date'
 
 export const metadata: Metadata = { title: 'Patrimônio' }
 
@@ -18,7 +19,7 @@ export default async function PatrimonyPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-slate-100">Patrimônio & CDI</h1>
         <p className="mt-0.5 text-sm text-slate-500">
-          Quantia guardada, taxa automática da BrasilAPI e rendimento estimado em tempo real.
+          Quantia guardada, taxa automática da BrasilAPI, resgates e rendimento em tempo real.
         </p>
       </div>
       <CdiCalculator
@@ -28,6 +29,7 @@ export default async function PatrimonyPage() {
           updated_at: savings?.updated_at ?? null,
         }}
         apiRate={apiRate}
+        startMonthKey={currentMonthKey()}
       />
     </div>
   )
