@@ -1,11 +1,12 @@
 'use client'
 
-import { useActionState, useState } from 'react'
-import { motion } from 'framer-motion'
-import { Check, Loader2, Zap } from 'lucide-react'
-import { saveSavings } from '@/lib/actions/savings'
+import { useActionState, useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Check, Loader2, Wallet, Zap } from 'lucide-react'
+import { saveSavings, withdrawSavings } from '@/lib/actions/savings'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Dialog } from '@/components/ui/dialog'
 import { FormError } from '@/components/ui/form-error'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,21 +22,26 @@ interface CdiCalculatorProps {
     updated_at: string | null
   }
   apiRate: { value: number; source: 'api' | 'fallback' }
+  startMonthKey: string
 }
 
 const PERCENT_CHIPS = [90, 100, 110]
 
-export function CdiCalculator({ initial, apiRate }: CdiCalculatorProps) {
-  // Estados em string → aceitam vírgula ou ponto ao digitar.
+export function CdiCalculator({ initial, apiRate, startMonthKey }: CdiCalculatorProps) {
   const [amountStr, setAmountStr] = useState(toEditableNumber(initial.amount))
   const [percentStr, setPercentStr] = useState(toEditableNumber(initial.cdi_percent))
   const [state, formAction, pending] = useActionState(saveSavings, {})
+  const [withdrawOpen, setWithdrawOpen] = useState(false)
 
-  // A taxa anual vem da BrasilAPI (fallback offline = taxa salva).
+  // Sincroniza o campo quando o saldo muda no servidor (ex.: após resgate).
+  useEffect(() => {
+    setAmountStr(toEditableNumber(initial.amount))
+  }, [initial.amount])
+
   const annualRate = apiRate.value
   const amount = parseMoney(amountStr) ?? 0
   const cdiPercent = parseMoney(percentStr) ?? 0
-  const result = computeCdi({ amount, annualRate, cdiPercent })
+  const result = computeCdi({ amount, annualRate, cdiPercent }, startMonthKey)
 
   return (
     <div className="space-y-4">
@@ -48,7 +54,6 @@ export function CdiCalculator({ initial, apiRate }: CdiCalculatorProps) {
           </p>
 
           <form action={formAction} className="mt-5 space-y-4">
-            {/* Taxa vigente escondida — gravada como fallback offline */}
             <input type="hidden" name="cdi_rate" value={String(annualRate)} />
 
             <div>
@@ -81,12 +86,16 @@ export function CdiCalculator({ initial, apiRate }: CdiCalculatorProps) {
                 {pending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Salvar no Supabase
               </Button>
-              {state.success && (
-                <p className="flex items-center gap-1.5 text-xs text-emerald-400">
-                  <Check className="h-3.5 w-3.5" /> {state.success}
-                </p>
-              )}
+              <Button type="button" variant="secondary" onClick={() => setWithdrawOpen(true)}>
+                <Wallet className="h-4 w-4" />Retirar dinheiro
+              </Button>
             </div>
+
+            {state.success && (
+              <p className="flex items-center gap-1.5 text-xs text-emerald-400">
+                <Check className="h-3.5 w-3.5" />{state.success}
+              </p>
+            )}
 
             <FormError message={state.error} />
 
@@ -102,8 +111,6 @@ export function CdiCalculator({ initial, apiRate }: CdiCalculatorProps) {
         <Card className="p-5 lg:col-span-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-slate-200">Rendimento estimado</h2>
-
-            {/* Indicador da taxa em tempo real */}
             <span className={cn(
               'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium',
               apiRate.source === 'api'
@@ -156,10 +163,10 @@ export function CdiCalculator({ initial, apiRate }: CdiCalculatorProps) {
         </Card>
       </div>
 
-      {/* ── Projeção 12 meses ── */}
+      {/* ── Projeção 12 meses (agora com meses reais + valor inicial real) ── */}
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-200">Projeção para 12 meses</h2>
+          <h2 className="text-sm font-semibold text-slate-200">Projeção de juros compostos · 12 meses</h2>
           <div className="flex items-center gap-3 text-[11px] text-slate-500">
             <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-indigo-500" />Bruto</span>
             <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-emerald-500" />Líquido (após IR)</span>
@@ -169,7 +176,56 @@ export function CdiCalculator({ initial, apiRate }: CdiCalculatorProps) {
           <ProjectionChart data={result.projection} />
         </div>
       </Card>
+
+      {/* ── Diálogo de resgate ── */}
+      <WithdrawDialog open={withdrawOpen} onClose={() => setWithdrawOpen(false)} balance={amount} />
     </div>
+  )
+}
+
+function WithdrawDialog({ open, onClose, balance }: { open: boolean; onClose: () => void; balance: number }) {
+  const [state, formAction, pending] = useActionState(withdrawSavings, {})
+
+  // Fecha o diálogo automaticamente após o resgate bem-sucedido.
+  useEffect(() => {
+    if (state.success) {
+      const timer = setTimeout(onClose, 1600)
+      return () => clearTimeout(timer)
+    }
+  }, [state, onClose])
+
+  return (
+    <Dialog open={open} title="Retirar dinheiro do cofrinho" onClose={onClose}>
+      <p className="text-xs text-slate-500">
+        O valor será descontado do saldo guardado. Seu histórico de resgates fica registrado.
+      </p>
+
+      <form action={formAction} className="mt-4 space-y-4">
+        <div>
+          <Label htmlFor="withdraw-amount">Valor do resgate (R$)</Label>
+          <Input id="withdraw-amount" name="amount" inputMode="decimal" placeholder="0,00" required />
+          {balance > 0 && (
+            <p className="mt-1.5 text-[11px] text-slate-600">
+              Saldo disponível: <span className="font-medium text-slate-400">{formatBRL(balance)}</span>
+            </p>
+          )}
+        </div>
+
+        <FormError message={state.error} />
+        {state.success && (
+          <p className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+            <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />{state.success}
+          </p>
+        )}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="secondary" size="sm" onClick={onClose}>Cancelar</Button>
+          <Button type="submit" size="sm" disabled={pending}>
+            {pending ? 'Processando…' : 'Confirmar resgate'}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   )
 }
 
