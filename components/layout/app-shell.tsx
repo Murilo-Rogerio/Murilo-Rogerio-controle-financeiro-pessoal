@@ -23,32 +23,34 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
 
   /**
    * ── FIX navbar mobile (Chromium/Brave/Chrome Android) ──
-   * Elementos fixed + backdrop-blur perdem a camada de pintura quando a aba é
-   * restaurada. Cobertura em 3 gatilhos:
-   *   1. montagem        → aba descartada recarrega o JS (efeito roda de novo)
-   *   2. pageshow        → volta do bfcache (efeitos NÃO rodam de novo lá)
-   *   3. visibilitychange→ aba volta de segundo plano
-   * O repaint alterna display + reflow forçado: as duas mudanças acontecem na
-   * mesma task (sem flash visível), mas descartam a camada antiga e obrigam
-   * o navegador a repintar o elemento do zero.
+   * Na restauração de aba, o navegador mede o viewport errado e elementos
+   * "fixed" de rodapé acabam atrás da toolbar do navegador (invisíveis e
+   * intocáveis). A navbar agora é sticky no fluxo (imune a isso). Este efeito
+   * cobre a restauração com 3 gatilhos e 2 ações:
+   *   gatilhos: montagem · pageshow (bfcache) · visibilitychange
+   *   ações:    re-layout do elemento + nudge de scroll de 1px (força o
+   *             navegador a reavaliar o viewport e a toolbar dinâmica)
    */
   useEffect(() => {
-    const nav = navRef.current
-    if (!nav) return
-
-    const repaint = () => {
-      nav.style.display = 'none'
-      void nav.offsetHeight // reflow síncrono — invalida o cache de layout
-      nav.style.display = ''
+    const forceRefresh = () => {
+      const nav = navRef.current
+      if (nav) {
+        nav.style.display = 'none'
+        void nav.offsetHeight // reflow síncrono
+        nav.style.display = ''
+      }
+      // Nudge de scroll: força reavaliação do viewport (toolbar dinâmica)
+      window.scrollBy(0, 1)
+      window.scrollBy(0, -1)
     }
 
-    repaint() // 1)
+    forceRefresh()
 
-    const onPageShow = () => repaint() // 2)
+    const onPageShow = () => forceRefresh()
     window.addEventListener('pageshow', onPageShow)
 
-    const onVisibility = () => { // 3)
-      if (document.visibilityState === 'visible') repaint()
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') forceRefresh()
     }
     document.addEventListener('visibilitychange', onVisibility)
 
@@ -59,14 +61,14 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
   }, [])
 
   return (
-    <div className="min-h-dvh">
+    <div className="flex min-h-dvh flex-col">
       {/* Halos sutis de fundo */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-32 left-1/4 h-80 w-80 rounded-full bg-emerald-500/[0.05] blur-[120px]" />
         <div className="absolute -bottom-24 right-[10%] h-96 w-96 rounded-full bg-indigo-500/[0.06] blur-[130px]" />
       </div>
 
-      {/* ── Sidebar (desktop) — mantém o blur, não é afetada pelo bug ── */}
+      {/* ── Sidebar (desktop) — fixed, sem problema (não há toolbar dinâmica) ── */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/5 bg-card/50 backdrop-blur-xl lg:flex">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
@@ -104,7 +106,7 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
       </aside>
 
       {/* ── Header (mobile) ── */}
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-white/5 bg-base/80 px-4 py-3 backdrop-blur-xl will-change-transform lg:hidden">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-white/5 bg-base/80 px-4 py-3 backdrop-blur-xl lg:hidden">
         <div className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
             <PiggyBank className="h-4 w-4" />
@@ -119,19 +121,21 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
         </form>
       </header>
 
-      {/* ── Conteúdo ── */}
-      <div className="lg:pl-64">
-        <main className="mx-auto w-full max-w-6xl px-4 pb-24 pt-6 sm:px-6 lg:pb-12 lg:pt-8">
+      {/* ── Conteúdo (flex-1: empurra a navbar pra baixo em páginas curtas) ── */}
+      <div className="flex-1 lg:pl-64">
+        <main className="mx-auto w-full max-w-6xl px-4 pb-4 pt-6 sm:px-6 lg:pb-12 lg:pt-8">
           {children}
         </main>
       </div>
 
-      {/* ── Bottom navigation (mobile) ──
-          SEM backdrop-blur (gatilho do bug de camada no Chromium) e fundo
-          sólido: camada de composição comum, repintada normalmente. */}
+      {/* ── Navbar mobile: sticky NO FLUXO (não fixed) ──
+          Imune aos bugs de viewport/toolbar na restauração de aba:
+          - conteúdo curto: o flex (flex-1) ancora ela no rodapé da tela;
+          - conteúdo longo: sticky bottom-0 a mantém visível durante o scroll;
+          - sem backdrop-blur e sem will-change: nada de camadas de GPU. */}
       <nav
         ref={navRef}
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-white/5 bg-card pb-[env(safe-area-inset-bottom)] will-change-transform transform-gpu lg:hidden"
+        className="sticky bottom-0 z-40 grid grid-cols-5 border-t border-white/5 bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
         {NAV.map(item => (
           <Link key={item.href} href={item.href}
