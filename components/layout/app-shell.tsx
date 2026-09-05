@@ -22,29 +22,39 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
 
   /**
-   * ── FIX: navbar inferior sumindo ao reabrir o navegador (Chrome Android) ──
-   * Elementos fixed + backdrop-blur às vezes não são "repintados" quando a aba
-   * é restaurada. Solução em 3 camadas:
-   *   1. transform-gpu / will-change (classes no <nav>) → camada própria;
-   *   2. nudge de repaint ao montar (aba restaurada recarrega o JS);
-   *   3. listener de pageshow → cobre o cache de navegação (bfcache).
+   * ── FIX navbar mobile (Chromium/Brave/Chrome Android) ──
+   * Elementos fixed + backdrop-blur perdem a camada de pintura quando a aba é
+   * restaurada. Cobertura em 3 gatilhos:
+   *   1. montagem        → aba descartada recarrega o JS (efeito roda de novo)
+   *   2. pageshow        → volta do bfcache (efeitos NÃO rodam de novo lá)
+   *   3. visibilitychange→ aba volta de segundo plano
+   * O repaint alterna display + reflow forçado: as duas mudanças acontecem na
+   * mesma task (sem flash visível), mas descartam a camada antiga e obrigam
+   * o navegador a repintar o elemento do zero.
    */
   useEffect(() => {
+    const nav = navRef.current
+    if (!nav) return
+
     const repaint = () => {
-      const nav = navRef.current
-      if (!nav) return
-      nav.style.opacity = '0.999'
-      requestAnimationFrame(() => {
-        if (navRef.current) navRef.current.style.opacity = ''
-      })
+      nav.style.display = 'none'
+      void nav.offsetHeight // reflow síncrono — invalida o cache de layout
+      nav.style.display = ''
     }
 
-    repaint()
-    window.addEventListener('pageshow', repaint)
+    repaint() // 1)
+
+    const onPageShow = () => repaint() // 2)
+    window.addEventListener('pageshow', onPageShow)
+
+    const onVisibility = () => { // 3)
+      if (document.visibilityState === 'visible') repaint()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
 
     return () => {
-      window.removeEventListener('pageshow', repaint)
-      if (navRef.current) navRef.current.style.opacity = ''
+      window.removeEventListener('pageshow', onPageShow)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [])
 
@@ -56,7 +66,7 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
         <div className="absolute -bottom-24 right-[10%] h-96 w-96 rounded-full bg-indigo-500/[0.06] blur-[130px]" />
       </div>
 
-      {/* ── Sidebar (desktop) ── */}
+      {/* ── Sidebar (desktop) — mantém o blur, não é afetada pelo bug ── */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/5 bg-card/50 backdrop-blur-xl lg:flex">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
@@ -117,12 +127,11 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
       </div>
 
       {/* ── Bottom navigation (mobile) ──
-          transform-gpu + will-change: camada de composição própria (fix do
-          repaint); pb-[env(safe-area-inset-bottom)]: não fica atrás da barra
-          de gestos do Android; bg mais opaco: fallback se o blur falhar. */}
+          SEM backdrop-blur (gatilho do bug de camada no Chromium) e fundo
+          sólido: camada de composição comum, repintada normalmente. */}
       <nav
         ref={navRef}
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-white/5 bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl will-change-transform transform-gpu lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-white/5 bg-card pb-[env(safe-area-inset-bottom)] will-change-transform transform-gpu lg:hidden"
       >
         {NAV.map(item => (
           <Link key={item.href} href={item.href}
