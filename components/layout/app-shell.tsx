@@ -3,30 +3,26 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CreditCard, LayoutDashboard, LogOut, PiggyBank, TrendingUp } from 'lucide-react'
+import { CreditCard, LayoutDashboard, LineChart, LogOut, PiggyBank, TrendingUp } from 'lucide-react'
 import { signOut } from '@/lib/actions/auth'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/cn'
 
 const NAV = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/entradas', label: 'Entradas', icon: TrendingUp },
-  { href: '/gastos', label: 'Gastos', icon: CreditCard },
-  { href: '/patrimonio', label: 'Patrimônio', icon: PiggyBank },
+  { href: '/dashboard', label: 'Dashboard', short: 'Início', icon: LayoutDashboard },
+  { href: '/entradas', label: 'Entradas', short: 'Entradas', icon: TrendingUp },
+  { href: '/gastos', label: 'Gastos', short: 'Gastos', icon: CreditCard },
+  { href: '/investimentos', label: 'Investimentos', short: 'Investir', icon: LineChart },
+  { href: '/patrimonio', label: 'Patrimônio', short: 'Cofrinho', icon: PiggyBank },
 ] as const
 
-/**
- * Estrutura responsiva com estética "black premium":
- * - halos radiais fixos ao fundo dão profundidade ao backdrop-blur dos cards;
- * - desktop: sidebar glass; mobile: header + bottom nav glass.
- */
 export function AppShell({ email, children }: { email: string; children: ReactNode }) {
   const pathname = usePathname()
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
 
   return (
     <div className="min-h-dvh">
-      {/* Halos sutis de fundo (emerald/indigo) — base do efeito de vidro */}
+      {/* Halos sutis de fundo */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-32 left-1/4 h-80 w-80 rounded-full bg-emerald-500/[0.05] blur-[120px]" />
         <div className="absolute -bottom-24 right-[10%] h-96 w-96 rounded-full bg-indigo-500/[0.06] blur-[130px]" />
@@ -93,15 +89,15 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
       </div>
 
       {/* ── Bottom navigation (mobile) ── */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-white/5 bg-card/80 backdrop-blur-xl lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-white/5 bg-card/80 backdrop-blur-xl lg:hidden">
         {NAV.map(item => (
           <Link key={item.href} href={item.href}
             className={cn(
-              'flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors',
+              'flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors',
               isActive(item.href) ? 'text-emerald-400' : 'text-slate-500',
             )}>
             <item.icon className="h-5 w-5" />
-            {item.label}
+            {item.short}
           </Link>
         ))}
       </nav>
