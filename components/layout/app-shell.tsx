@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { CreditCard, LayoutDashboard, LineChart, LogOut, PiggyBank, TrendingUp } from 'lucide-react'
@@ -16,49 +16,15 @@ const NAV = [
   { href: '/patrimonio', label: 'Patrimônio', short: 'Cofrinho', icon: PiggyBank },
 ] as const
 
+/**
+ * Layout do shell baseado em LARGURA + TIPO DE APONTADOR (ver globals.css):
+ *  - desktop (≥1024px + mouse): sidebar fixa
+ *  - celular (dedo, qualquer largura reportada): header + navbar inferior
+ *    no fluxo (sticky), imune ao bug de restauração de aba do Chromium.
+ */
 export function AppShell({ email, children }: { email: string; children: ReactNode }) {
   const pathname = usePathname()
-  const navRef = useRef<HTMLElement>(null)
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
-
-  /**
-   * ── FIX navbar mobile (Chromium/Brave/Chrome Android) ──
-   * Na restauração de aba, o navegador mede o viewport errado e elementos
-   * "fixed" de rodapé acabam atrás da toolbar do navegador (invisíveis e
-   * intocáveis). A navbar agora é sticky no fluxo (imune a isso). Este efeito
-   * cobre a restauração com 3 gatilhos e 2 ações:
-   *   gatilhos: montagem · pageshow (bfcache) · visibilitychange
-   *   ações:    re-layout do elemento + nudge de scroll de 1px (força o
-   *             navegador a reavaliar o viewport e a toolbar dinâmica)
-   */
-  useEffect(() => {
-    const forceRefresh = () => {
-      const nav = navRef.current
-      if (nav) {
-        nav.style.display = 'none'
-        void nav.offsetHeight // reflow síncrono
-        nav.style.display = ''
-      }
-      // Nudge de scroll: força reavaliação do viewport (toolbar dinâmica)
-      window.scrollBy(0, 1)
-      window.scrollBy(0, -1)
-    }
-
-    forceRefresh()
-
-    const onPageShow = () => forceRefresh()
-    window.addEventListener('pageshow', onPageShow)
-
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') forceRefresh()
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-
-    return () => {
-      window.removeEventListener('pageshow', onPageShow)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [])
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -68,8 +34,8 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
         <div className="absolute -bottom-24 right-[10%] h-96 w-96 rounded-full bg-indigo-500/[0.06] blur-[130px]" />
       </div>
 
-      {/* ── Sidebar (desktop) — fixed, sem problema (não há toolbar dinâmica) ── */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/5 bg-card/50 backdrop-blur-xl lg:flex">
+      {/* ── Sidebar (desktop: largura + mouse) ── */}
+      <aside className="desktop-only fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-white/5 bg-card/50 backdrop-blur-xl">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
             <PiggyBank className="h-5 w-5" />
@@ -105,8 +71,8 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
         </div>
       </aside>
 
-      {/* ── Header (mobile) ── */}
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-white/5 bg-base/80 px-4 py-3 backdrop-blur-xl lg:hidden">
+      {/* ── Header (mobile: apontador = dedo) ── */}
+      <header className="mobile-only sticky top-0 z-40 flex items-center justify-between border-b border-white/5 bg-base/80 px-4 py-3 backdrop-blur-xl">
         <div className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
             <PiggyBank className="h-4 w-4" />
@@ -121,22 +87,15 @@ export function AppShell({ email, children }: { email: string; children: ReactNo
         </form>
       </header>
 
-      {/* ── Conteúdo (flex-1: empurra a navbar pra baixo em páginas curtas) ── */}
-      <div className="flex-1 lg:pl-64">
-        <main className="mx-auto w-full max-w-6xl px-4 pb-4 pt-6 sm:px-6 lg:pb-12 lg:pt-8">
+      {/* ── Conteúdo (flex-1 ancora a navbar no rodapé em páginas curtas) ── */}
+      <div className="app-content flex-1">
+        <main className="app-main mx-auto w-full max-w-6xl px-4 pb-4 pt-6 sm:px-6">
           {children}
         </main>
       </div>
 
-      {/* ── Navbar mobile: sticky NO FLUXO (não fixed) ──
-          Imune aos bugs de viewport/toolbar na restauração de aba:
-          - conteúdo curto: o flex (flex-1) ancora ela no rodapé da tela;
-          - conteúdo longo: sticky bottom-0 a mantém visível durante o scroll;
-          - sem backdrop-blur e sem will-change: nada de camadas de GPU. */}
-      <nav
-        ref={navRef}
-        className="sticky bottom-0 z-40 grid grid-cols-5 border-t border-white/5 bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
-      >
+      {/* ── Navbar mobile: sticky NO FLUXO, sempre presente no celular ── */}
+      <nav className="mobile-only sticky bottom-0 z-40 grid grid-cols-5 border-t border-white/5 bg-card pb-[env(safe-area-inset-bottom)]">
         {NAV.map(item => (
           <Link key={item.href} href={item.href}
             className={cn(
