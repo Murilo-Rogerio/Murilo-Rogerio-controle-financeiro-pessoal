@@ -202,5 +202,4 @@ npm run dev
 
 ## 📄 Licença
 ### Distribuído sob a licença MIT. Veja LICENSE para mais detalhes.
-
-###Feito por Murilo Rogério.
+- Feito por Murilo Rogério.
